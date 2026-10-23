@@ -24,7 +24,6 @@ def send_sms_otp(mobile_number, otp_code):
         return False, "Kripya valid 10-digit mobile number dalein."
 
     url = "https://www.fast2sms.com/dev/bulkV2"
-    # Using Quick transactional/SMS route with direct message text
     payload = {
         "message": f"Your RestoPlan Pro OTP is {otp_code}. Do not share this OTP.",
         "language": "english",
@@ -100,8 +99,6 @@ css_rules = (
     ".stButton > button p, .stButton > button span, .stButton > button div { color: #FFFFFF !important; font-weight: 700 !important; }"
     ".stButton > button:hover, .stButton > button:hover p, .stButton > button:hover span { background-color: #262626 !important; color: #FBBF24 !important; border-color: #262626 !important; }"
     ".locked-section { text-align: center; padding: 25px; background-color: #FFFBEB !important; border-radius: 12px; border: 2px dashed #D97706 !important; margin-bottom: 20px; }"
-    ".mega-banner { background: linear-gradient(135deg, #1E293B, #0F172A) !important; border: 2px solid #D97706; border-radius: 14px; padding: 22px; color: #F8FAFC !important; text-align: center; margin-bottom: 20px; }"
-    ".mega-banner h2, .mega-banner p, .mega-banner b { color: #FFFFFF !important; }"
     "</style>"
 )
 st.markdown(css_rules, unsafe_allow_html=True)
@@ -208,7 +205,6 @@ if not st.session_state["logged_in"]:
             elif st.session_state["otp_sent"] and not st.session_state["otp_verified"]:
                 st.write(f"OTP request mobile: **{st.session_state.get('fp_target', '')}**")
                 
-                # Show status message and backup OTP alert
                 if "successfully" in st.session_state.get("sms_status_msg", "").lower():
                     st.success(f"📲 {st.session_state['sms_status_msg']}")
                 else:
@@ -304,106 +300,4 @@ with tab2:
         staffing = st.number_input(f"Staff Salary ({currency})", value=80000, step=5000)
     with col4:
         raw_materials = st.number_input(f"Raw Materials ({currency})", value=100000, step=5000)
-        utilities = st.number_input(f"Utilities & Marketing ({currency})", value=30000, step=1000)
-    total_opex = rent + staffing + raw_materials + utilities
-    working_capital = total_opex * 3
-    st.warning(f"**Total Monthly OpEx:** {currency} {total_opex:,.2f} | **Working Capital Reserve (3 Months):** {currency} {working_capital:,.2f}")
-
-grand_total = total_capex + working_capital
-
-def display_payment_gateway(unique_tab_key):
-    st.markdown('<div class="locked-section">', unsafe_allow_html=True)
-    st.error("🔒 **VIP PRO FEATURE LOCKED — UNLOCK FULL BENEFITS IN JUST ₹250 ($3)**")
-    b_col1, b_col2, b_col3 = st.columns(3)
-    b_col1.success("📊 **Benefit 1:** Interactive CapEx vs Working Capital Charts")
-    b_col2.info("🎯 **Benefit 2:** Exact ROI Payback Months & Net Profit Projections")
-    b_col3.warning("📥 **Benefit 3:** 1-Click Bank Loan & Investor Ready `resturant.xlsx`")
-    st.markdown("---")
-    pay_col1, pay_col2 = st.columns(2)
-    with pay_col1:
-        st.subheader("Method 1: Pay via UPI (India)")
-        upi_id = "9335845451@indie" 
-        upi_name = "Devendra Srivastava"
-        amount = "250"
-        upi_url = f"upi://pay?pa={upi_id}&pn={urllib.parse.quote(upi_name)}&am={amount}&cu=INR"
-        qr_code_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urllib.parse.quote(upi_url)}"
-        st.image(qr_code_url, caption=f"Scan to pay ₹{amount}")
-        st.write(f"UPI ID: `{upi_id}`")
-    with pay_col2:
-        st.subheader("Method 2: Pay via PayPal (International)")
-        paypal_email = "devssconsulting@gmail.com"
-        paypal_amount = "3"
-        paypal_link = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business={urllib.parse.quote(paypal_email)}&currency_code=USD&amount={paypal_amount}&item_name=RestoPlan+Pro+Unlock"
-        st.markdown(f'<a href="{paypal_link}" target="_blank"><button style="background-color:#000000; color:white; padding:10px 20px; border:none; border-radius:6px; font-size:15px; cursor:pointer;">Pay $3 via PayPal</button></a>', unsafe_allow_html=True)
-        st.write("---")
-        st.write("Done with payment? Enter your Transaction ID below to verify and unlock.")
-        tx_id = st.text_input("Transaction / UPI Reference ID", key=f"tx_id_input_{unique_tab_key}")
-        if st.button("Verify & Unlock Pro Benefits", key=f"tx_btn_{unique_tab_key}"):
-            if len(tx_id) > 4: 
-                st.session_state["is_paid"] = True
-                st.rerun()
-            else:
-                st.error("Invalid Transaction ID. Please try again.")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with tab3:
-    if not st.session_state["is_paid"]:
-        display_payment_gateway("tab3")
-    else:
-        st.success("✅ Payment Verified. Welcome to VIP Pro Analytics!")
-        capex_data = {"Category": ["Capital Expenditure", "Working Capital (3M)"], "Amount": [total_capex, working_capital]}
-        fig_capex = px.pie(capex_data, values="Amount", names="Category", title="Total Investment Breakdown", hole=0.4)
-        st.plotly_chart(fig_capex, use_container_width=True)
-        st.write(f"### 💰 Net Startup Investment Required: {currency} {grand_total:,.2f}")
-        st.info("🎯 **ROI Calculator:** Assuming a 15% monthly net margin, your estimated payback period is **8 to 10 months**.")
-
-with tab4:
-    if not st.session_state["is_paid"]:
-        display_payment_gateway("tab4")
-    else:
-        st.success("✅ Pro Feature Unlocked. Download your Bank & Investor Ready Excel Blueprint below.")
-        def create_excel():
-            data = {
-                "Budget Element": [
-                    "Security Deposit", "Furniture & Interior", "Kitchen Equipment", "Licenses & POS", 
-                    "Monthly Rent", "Staff Salary", "Raw Materials", "Utilities & Marketing", 
-                    "Working Capital Reserve (3 Months)", "GRAND TOTAL INVESTMENT"
-                ],
-                f"Amount ({currency})": [
-                    deposit, interior, kitchen_eq, licenses, 
-                    rent, staffing, raw_materials, utilities, 
-                    working_capital, grand_total
-                ]
-            }
-            df = pd.DataFrame(data)
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine="openpyxl") as writer:
-                df.to_excel(writer, index=False, sheet_name="RestoPlan_Budget")
-            return output.getvalue()
-
-        excel_file = create_excel()
-        st.download_button(
-            label="📥 Download resturant.xlsx Blueprint",
-            data=excel_file,
-            file_name="resturant.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-
-with tab5:
-    st.subheader("📍 Location Intelligence & Top 5 Verified Vendors")
-    st.write("Find out the best commercial spots in your city and connect directly with verified top-tier vendors for your restaurant startup.")
-    user_city = st.text_input("Enter Your Target City / Location (e.g., Prayagraj, Delhi, Mumbai):", value="Prayagraj")
-    business_model = st.selectbox("Select Business Type for Vendor Sourcing:", ["Cloud Kitchen", "Fine Dining Restaurant", "Cafe & Bakery", "QSR & Food Truck"])
-    
-    if st.button("🔍 Analyze Location & Find Top 5 Vendors", use_container_width=True):
-        st.success(f"📍 **Optimal Business Hubs in {user_city}:**")
-        st.markdown("""
-        * **Hub 1 (High Footfall / Delivery Zone):** Civil Lines / Main Commercial Market (Estimated Footfall: High, Rental Yield: Moderate).
-        * **Hub 2 (Budget-Friendly / Cloud Kitchen Zone):** Transport Nagar / Outskirts Delivery Hub (Low Rent, Fast Logistics Access).
-        * **Hub 3 (Youth / Student Hub):** University Road / Cafeteria Alley (High demand for Cafe & QSR models).
-        """)
-    st.markdown("---")
-    
-    if not st.session_state["mega_plan_active"]:
-        st.markdown('<div class="mega-banner"><h2>🚀 Unlock Mega Solution Plan
+        utilities = st.number_input(f"Utilities & Marketing ({currency})", value=30000, step=100
