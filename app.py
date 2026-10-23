@@ -13,43 +13,41 @@ import requests
 st.set_page_config(page_title="RestoPlan Pro", page_icon="🍽️", layout="wide", initial_sidebar_state="expanded")
 
 # --- FAST2SMS API CONFIGURATION ---
-# https://www.fast2sms.com par free sign-up karke "Dev API" se apni free API Key le sakte hain
-FAST2SMS_API_KEY = os.environ.get("FAST2SMS_API_KEY", "YOUR_FAST2SMS_API_KEY_HERE")
+FAST2SMS_API_KEY = "Rg7N51LZuhDCFWsMEorwmBHdpGSye802XnlVP3qU9azA4v6JkY9Eun8zWR4VZq1pdCaeAJUmB27QNFXM"
 
 def send_sms_otp(mobile_number, otp_code):
-    """Sends OTP to Indian mobile numbers via Fast2SMS API with error handling."""
     clean_mobile = "".join(filter(str.isdigit, str(mobile_number)))
     if len(clean_mobile) == 12 and clean_mobile.startswith("91"):
         clean_mobile = clean_mobile[2:]
     
     if len(clean_mobile) != 10:
-        return False, "Kripya 10-digit ka valid mobile number dalein."
-
-    if FAST2SMS_API_KEY == "YOUR_FAST2SMS_API_KEY_HERE":
-        # Fallback for local testing / when API key is not yet set
-        return True, "DEMO_MODE"
+        return False, "Kripya valid 10-digit mobile number dalein."
 
     url = "https://www.fast2sms.com/dev/bulkV2"
+    # Using Quick transactional/SMS route with direct message text
     payload = {
-        "variables_values": str(otp_code),
-        "route": "otp",
+        "message": f"Your RestoPlan Pro OTP is {otp_code}. Do not share this OTP.",
+        "language": "english",
+        "route": "q",
         "numbers": clean_mobile
     }
     headers = {
-        'authorization': FAST2SMS_API_KEY,
+        'authorization': FAST2SMS_API_KEY.strip(),
         'Content-Type': "application/x-www-form-urlencoded"
     }
 
     try:
-        response = requests.post(url, data=payload, headers=headers, timeout=8)
+        response = requests.post(url, data=payload, headers=headers, timeout=10)
         res_json = response.json()
         if res_json.get("return") is True:
-            return True, "SMS sent successfully to mobile."
+            return True, "SMS aapke mobile par successfully send ho gaya!"
         else:
-            err_msg = res_json.get("message", ["SMS Gateway error"])[0] if isinstance(res_json.get("message"), list) else res_json.get("message", "SMS Gateway error")
-            return False, f"SMS Gateway error: {err_msg}"
+            msg = res_json.get("message", "API Route Error")
+            if isinstance(msg, list) and len(msg) > 0:
+                msg = msg[0]
+            return False, f"{msg}"
     except Exception as e:
-        return False, f"Connection error: {str(e)}"
+        return False, f"Network issue: {str(e)}"
 
 # --- DATABASE SETUP ---
 def init_db():
@@ -80,85 +78,32 @@ if "username" not in st.session_state:
     st.session_state["username"] = ""
 if "identifier" not in st.session_state:
     st.session_state["identifier"] = ""
-
-# OTP Flow states
 if "otp_sent" not in st.session_state:
     st.session_state["otp_sent"] = False
 if "otp_verified" not in st.session_state:
     st.session_state["otp_verified"] = False
 if "fp_target" not in st.session_state:
     st.session_state["fp_target"] = ""
+if "current_otp" not in st.session_state:
+    st.session_state["current_otp"] = ""
+if "sms_status_msg" not in st.session_state:
+    st.session_state["sms_status_msg"] = ""
 
 # 3. Clean White Background & Crisp Button CSS
-css_rules = """
-<style>
-[data-testid='stAppViewContainer'] {
-    background-color: #F8FAFC !important;
-}
-[data-testid='stHeader'] {
-    background-color: #FFFFFF !important;
-    border-bottom: 1px solid #E2E8F0;
-}
-.title-text { 
-    font-size: 38px; 
-    font-weight: 800; 
-    color: #0F172A !important; 
-    text-align: center; 
-    margin-top: 5px; 
-    margin-bottom: 0px; 
-}
-.subtitle-text { 
-    font-size: 15px; 
-    color: #B45309 !important; 
-    text-align: center; 
-    margin-bottom: 25px; 
-    font-weight: 700; 
-    letter-spacing: 1.2px; 
-}
-.stButton > button, 
-button[kind="primary"], 
-button[kind="secondary"] {
-    background-color: #000000 !important;
-    color: #FFFFFF !important;
-    border: 1px solid #000000 !important;
-    border-radius: 8px !important;
-    font-size: 16px !important;
-    font-weight: 700 !important;
-    padding: 10px 20px !important;
-}
-.stButton > button p, 
-.stButton > button span, 
-.stButton > button div {
-    color: #FFFFFF !important;
-    font-weight: 700 !important;
-}
-.stButton > button:hover, 
-.stButton > button:hover p, 
-.stButton > button:hover span {
-    background-color: #262626 !important;
-    color: #FBBF24 !important;
-    border-color: #262626 !important;
-}
-.locked-section { 
-    text-align: center; 
-    padding: 25px; 
-    background-color: #FFFBEB !important; 
-    border-radius: 12px; 
-    border: 2px dashed #D97706 !important; 
-    margin-bottom: 20px; 
-}
-.mega-banner { 
-    background: linear-gradient(135deg, #1E293B, #0F172A) !important; 
-    border: 2px solid #D97706; 
-    border-radius: 14px; 
-    padding: 22px; 
-    color: #F8FAFC !important; 
-    text-align: center; 
-    margin-bottom: 20px; 
-}
-.mega-banner h2, .mega-banner p, .mega-banner b { color: #FFFFFF !important; }
-</style>
-"""
+css_rules = (
+    "<style>"
+    "[data-testid='stAppViewContainer'] { background-color: #F8FAFC !important; }"
+    "[data-testid='stHeader'] { background-color: #FFFFFF !important; border-bottom: 1px solid #E2E8F0; }"
+    ".title-text { font-size: 38px; font-weight: 800; color: #0F172A !important; text-align: center; margin-top: 5px; margin-bottom: 0px; }"
+    ".subtitle-text { font-size: 15px; color: #B45309 !important; text-align: center; margin-bottom: 25px; font-weight: 700; letter-spacing: 1.2px; }"
+    ".stButton > button, button[kind='primary'], button[kind='secondary'] { background-color: #000000 !important; color: #FFFFFF !important; border: 1px solid #000000 !important; border-radius: 8px !important; font-size: 16px !important; font-weight: 700 !important; padding: 10px 20px !important; }"
+    ".stButton > button p, .stButton > button span, .stButton > button div { color: #FFFFFF !important; font-weight: 700 !important; }"
+    ".stButton > button:hover, .stButton > button:hover p, .stButton > button:hover span { background-color: #262626 !important; color: #FBBF24 !important; border-color: #262626 !important; }"
+    ".locked-section { text-align: center; padding: 25px; background-color: #FFFBEB !important; border-radius: 12px; border: 2px dashed #D97706 !important; margin-bottom: 20px; }"
+    ".mega-banner { background: linear-gradient(135deg, #1E293B, #0F172A) !important; border: 2px solid #D97706; border-radius: 14px; padding: 22px; color: #F8FAFC !important; text-align: center; margin-bottom: 20px; }"
+    ".mega-banner h2, .mega-banner p, .mega-banner b { color: #FFFFFF !important; }"
+    "</style>"
+)
 st.markdown(css_rules, unsafe_allow_html=True)
 
 # Logo & Header
@@ -171,7 +116,7 @@ with col_l2:
     st.markdown('<div class="title-text">RestoPlan Pro</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle-text">ULTIMATE RESTAURANT STARTUP BUDGET & ROI ANALYZER</div>', unsafe_allow_html=True)
 
-# 4. Auth System (Login, Register, Forgot Password)
+# 4. Auth System
 if not st.session_state["logged_in"]:
     col_left, col_right = st.columns([1.2, 1], gap="large")
     
@@ -234,9 +179,9 @@ if not st.session_state["logged_in"]:
                     st.error("Please fill in all details.")
                     
         elif "Forgot" in auth_action:
-            st.info("Reset your password using an SMS OTP sent to your Mobile Number.")
+            st.info("Reset your password using an SMS OTP sent directly to your Mobile Phone.")
             
-            # Step 1: Send OTP via SMS
+            # Step 1: Request OTP
             if not st.session_state["otp_sent"] and not st.session_state["otp_verified"]:
                 fp_identifier = st.text_input("Registered 10-digit Mobile Number", key="fp_id_field")
                 if st.button("Send SMS OTP", use_container_width=True, key="send_otp_btn"):
@@ -248,27 +193,28 @@ if not st.session_state["logged_in"]:
                             c.execute("INSERT OR REPLACE INTO otps (identifier, otp) VALUES (?, ?)", (fp_identifier, otp_val))
                             conn.commit()
                             
-                            success, msg = send_sms_otp(fp_identifier, otp_val)
+                            ok, status_txt = send_sms_otp(fp_identifier, otp_val)
                             st.session_state["otp_sent"] = True
                             st.session_state["fp_target"] = fp_identifier
-                            
-                            if success and msg == "DEMO_MODE":
-                                st.warning("ℹ️ Fast2SMS API Key add nahi hai, isliye screen par OTP dikha rahe hain:")
-                                st.success(f"📲 OTP: **{otp_val}** (Valid for {fp_identifier})")
-                            elif success:
-                                st.success(f"📲 OTP SMS aapke mobile ({fp_identifier}) par bhej diya gaya hai!")
-                            else:
-                                st.warning(f"⚠️ SMS gateway message: {msg}")
-                                st.info(f"Fallback OTP: **{otp_val}**")
+                            st.session_state["current_otp"] = otp_val
+                            st.session_state["sms_status_msg"] = status_txt
                             st.rerun()
                         else:
-                            st.error("❌ Yeh Mobile Number registered nahi hai.")
+                            st.error("❌ Yeh Mobile Number registered nahi hai. Pehle Register karein.")
                     else:
-                        st.error("Kripya apna registered Mobile Number dalein.")
+                        st.error("Kripya apna registered 10-digit Mobile Number dalein.")
 
-            # Step 2: Verify OTP
+            # Step 2: Enter & Verify OTP
             elif st.session_state["otp_sent"] and not st.session_state["otp_verified"]:
-                st.write(f"OTP bheja gaya number: **{st.session_state.get('fp_target', '')}**")
+                st.write(f"OTP request mobile: **{st.session_state.get('fp_target', '')}**")
+                
+                # Show status message and backup OTP alert
+                if "successfully" in st.session_state.get("sms_status_msg", "").lower():
+                    st.success(f"📲 {st.session_state['sms_status_msg']}")
+                else:
+                    st.warning(f"Gateway Notice: {st.session_state.get('sms_status_msg', '')}")
+                    st.info(f"Screen Alert (Instant OTP): **{st.session_state.get('current_otp', '')}**")
+                
                 entered_otp = st.text_input("Enter 4-digit OTP", key="entered_otp_field")
                 
                 col_v1, col_v2 = st.columns(2)
@@ -278,19 +224,19 @@ if not st.session_state["logged_in"]:
                         row = c.fetchone()
                         if row and row[0] == entered_otp:
                             st.session_state["otp_verified"] = True
-                            st.success("✅ OTP Verified! Ab apna naya password banayein.")
+                            st.success("✅ OTP Verified! Ab naya password set karein.")
                             st.rerun()
                         else:
-                            st.error("❌ Galat OTP. Dobara check karein.")
+                            st.error("❌ Galat OTP. Dobara check karke enter karein.")
                 with col_v2:
                     if st.button("Resend OTP", use_container_width=True, key="resend_fp_btn"):
                         st.session_state["otp_sent"] = False
                         st.session_state["otp_verified"] = False
                         st.rerun()
 
-            # Step 3: New Password & Confirm Password
+            # Step 3: Set New & Confirm Password
             elif st.session_state["otp_verified"]:
-                st.success(f"User Verified: **{st.session_state.get('fp_target', '')}**")
+                st.success(f"Verified User: **{st.session_state.get('fp_target', '')}**")
                 new_pass = st.text_input("New Password", type="password", key="new_pass_field")
                 confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_field")
                 
@@ -460,48 +406,4 @@ with tab5:
     st.markdown("---")
     
     if not st.session_state["mega_plan_active"]:
-        st.markdown('<div class="mega-banner"><h2>🚀 Unlock Mega Solution Plan ($12 / ₹1,100)</h2><p>Get direct contact details of the <b>Top 5 Verified Vendors</b> for Kitchen Equipment, Raw Materials, Interiors, and POS Systems, plus direct vendor-to-founder calling features!</p></div>', unsafe_allow_html=True)
-        m_col1, m_col2 = st.columns(2)
-        with m_col1:
-            st.markdown("### Pay via UPI (₹1,100 INR)")
-            mega_upi = "9335845451@indie"
-            mega_upi_url = f"upi://pay?pa={mega_upi}&pn=Devendra%20Srivastava&am=1100&cu=INR"
-            mega_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urllib.parse.quote(mega_upi_url)}"
-            st.image(mega_qr, caption="Scan & Pay ₹1,100")
-            st.write(f"UPI ID: `{mega_upi}`")
-        with m_col2:
-            st.markdown("### Pay via PayPal ($12 USD)")
-            paypal_email = "devssconsulting@gmail.com"
-            paypal_amount = "12"
-            paypal_link = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business={urllib.parse.quote(paypal_email)}&currency_code=USD&amount={paypal_amount}&item_name=Mega+Solution+Plan"
-            st.markdown(f'<a href="{paypal_link}" target="_blank"><button style="background-color:#000000; color:white; padding:12px 24px; border:none; border-radius:6px; font-size:15px; cursor:pointer; font-weight:bold;">Pay $12 via PayPal</button></a>', unsafe_allow_html=True)
-            st.write("---")
-            mega_tx = st.text_input("Enter Mega Plan Transaction ID", key="mega_tx_input")
-            if st.button("Verify & Activate Mega Solution Plan", key="verify_mega_btn"):
-                if len(mega_tx) > 4:
-                    st.session_state["mega_plan_active"] = True
-                    conn = sqlite3.connect('users.db')
-                    c = conn.cursor()
-                    target_id = st.session_state.get("identifier", "")
-                    c.execute("UPDATE users SET mega_plan = 1 WHERE identifier = ?", (target_id,))
-                    conn.commit()
-                    conn.close()
-                    st.success("🎉 Mega Solution Plan Activated Successfully! Enjoy direct vendor access.")
-                    st.rerun()
-                else:
-                    st.error("Please enter a valid Transaction ID.")
-    else:
-        st.success("👑 **Mega Solution Plan Active!** Here are the Top 5 Verified Vendors for your setup:")
-        vendors_df = pd.DataFrame({
-            "Vendor Name": ["Apex Commercial Kitchens", "Metro Fresh Agro Supplies", "Urban Décor & Interiors", "FastPOS Billing Solutions", "Delta Refrigeration & HVAC"],
-            "Specialization": ["Commercial Heavy-Duty Ovens & Fryers", "Bulk Organic Raw Materials & Spices", "Turnkey Restaurant Interior Fit-outs", "Cloud POS & Inventory Software", "Walk-in Freezers & AC Ducting"],
-            "Contact Phone / Email": ["+91 98765 43210 / sales@apexkitchen.com", "+91 91234 56789 / supply@metroagro.com", "+91 99887 76655 / design@urbandecor.in", "+91 95544 33221 / support@fastpos.io", "+91 94433 22110 / info@deltahvac.com"],
-            "Action / Direct Inquiry": ["Call Vendor", "Request Quote", "Book Consultation", "Get Free Demo", "Get Catalog"]
-        })
-        st.dataframe(vendors_df, use_container_width=True)
-        st.info("💡 **Pro Tip:** Mention **RestoPlan Pro Reference** when calling these vendors to get an exclusive 10% startup discount on bulk orders!")
-
-with tab6:
-    st.subheader("🎥 Step-by-Step Restaurant Budget Workflow Video Walkthrough")
-    st.write("Watch this video tutorial to learn how to use every feature of RestoPlan Pro step-by-step.")
-    st.video("https://youtu.be/reCF7nIfen4")
+        st.markdown('<div class="mega-banner"><h2>🚀 Unlock Mega Solution Plan
