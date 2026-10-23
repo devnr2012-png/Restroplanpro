@@ -60,7 +60,6 @@ if "otp_sent" not in st.session_state:
 # 3. Standard Clean White & Charcoal Black Modern Theme
 css_rules = """
 <style>
-/* Main App Background & Typography */
 [data-testid='stAppViewContainer'] {
     background-color: #F8FAFC !important;
     color: #0F172A !important;
@@ -73,8 +72,6 @@ body, p, span, label, div {
     color: #1E293B !important;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
-
-/* Header & Titles */
 .title-text { 
     font-size: 38px; 
     font-weight: 800; 
@@ -92,8 +89,6 @@ body, p, span, label, div {
     font-weight: 700; 
     letter-spacing: 1.2px; 
 }
-
-/* Modern Card Containers */
 .side-card { 
     background: #FFFFFF !important; 
     border: 1px solid #E2E8F0 !important; 
@@ -121,8 +116,6 @@ body, p, span, label, div {
 .mega-banner h2, .mega-banner p, .mega-banner b {
     color: #FFFFFF !important;
 }
-
-/* Button & Inputs Styling */
 button[kind="primary"], .stButton > button {
     background-color: #0F172A !important;
     color: #FFFFFF !important;
@@ -451,4 +444,10 @@ with tab5:
             
             st.markdown(f'<a href="{paypal_link}" target="_blank"><button style="background-color:#0F172A; color:white; padding:12px 24px; border:none; border-radius:6px; font-size:15px; cursor:pointer; font-weight:bold;">Pay $12 via PayPal</button></a>', unsafe_allow_html=True)
             st.write("---")
-            mega_tx = st.text_input("Enter Mega Plan Transaction ID", key="mega_
+            mega_tx = st.text_input("Enter Mega Plan Transaction ID", key="mega_tx_input")
+            if st.button("Verify & Activate Mega Solution Plan", key="verify_mega_btn"):
+                if len(mega_tx) > 4:
+                    st.session_state["mega_plan_active"] = True
+                    conn = sqlite3.connect('users.db')
+                    c = conn.cursor()
+                    c.execute("UPDATE users SET mega_plan = 1 WHERE identifier = ?", (st.session_
