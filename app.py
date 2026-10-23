@@ -7,28 +7,34 @@ import urllib.parse
 import os
 import sqlite3
 import hashlib
+import random
 
 # 1. Page Configuration
 st.set_page_config(page_title="RestoPlan Pro", page_icon="🍽️", layout="wide", initial_sidebar_state="expanded")
 
-# --- DATABASE SETUP (AUTO RESET TO FIX SCHEMA ERRORS) ---
+# --- DATABASE SETUP (AUTO FIX & COMPATIBILITY) ---
 def init_db():
     conn = sqlite3.connect('users.db')
     c = conn.cursor()
-    # Check if table exists with correct schema, if not recreate cleanly
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            username TEXT,
+            identifier TEXT UNIQUE,
+            password TEXT,
+            mega_plan INTEGER DEFAULT 0
+        )
+    ''')
     try:
-        c.execute("SELECT mega_plan FROM users LIMIT 1")
+        c.execute('ALTER TABLE users ADD COLUMN mega_plan INTEGER DEFAULT 0')
     except sqlite3.OperationalError:
-        # Table doesn't exist or column missing, drop and recreate fresh
-        c.execute("DROP TABLE IF EXISTS users")
-        c.execute('''
-            CREATE TABLE users (
-                username TEXT,
-                identifier TEXT UNIQUE,
-                password TEXT,
-                mega_plan INTEGER DEFAULT 0
-            )
-        ''')
+        pass
+        
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS otps (
+            identifier TEXT PRIMARY KEY,
+            otp TEXT
+        )
+    ''')
     conn.commit()
     conn.close()
 
@@ -48,22 +54,90 @@ if "username" not in st.session_state:
     st.session_state["username"] = ""
 if "identifier" not in st.session_state:
     st.session_state["identifier"] = ""
+if "otp_sent" not in st.session_state:
+    st.session_state["otp_sent"] = False
 
-# 3. Premium Luxury Restaurant Theme CSS
-css_rules = (
-    "<style>"
-    "[data-testid='stAppViewContainer'] {"
-    "background-image: linear-gradient(rgba(30, 20, 10, 0.90), rgba(15, 10, 5, 0.95)), "
-    "url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=2070&auto=format&fit=crop');"
-    "background-size: cover; background-attachment: fixed;}"
-    "[data-testid='stHeader'] { background: rgba(0,0,0,0); }"
-    ".title-text { font-size: 42px; font-weight: 800; color: #F5B041; text-align: center; text-shadow: 2px 2px 6px rgba(0,0,0,0.8); margin-top: 0px; margin-bottom: 0px; }"
-    ".subtitle-text { font-size: 16px; color: #F39C12; text-align: center; margin-bottom: 25px; font-weight: 600; letter-spacing: 1.5px; }"
-    ".locked-section { text-align: center; padding: 30px; background-color: rgba(20, 15, 10, 0.85); border-radius: 12px; border: 2px dashed #F1C40F; margin-bottom: 20px;}"
-    ".side-card { background: rgba(20, 15, 10, 0.88); border: 1px solid #D4AC0D; border-radius: 16px; padding: 25px; box-shadow: 0 10px 25px rgba(0,0,0,0.7); }"
-    ".mega-banner { background: linear-gradient(135deg, #78350f, #b45309); border: 2px solid #F5B041; border-radius: 14px; padding: 25px; color: white; text-align: center; margin-bottom: 25px; }"
-    "</style>"
-)
+# 3. Standard Clean White & Charcoal Black Modern Theme
+css_rules = """
+<style>
+/* Main App Background & Typography */
+[data-testid='stAppViewContainer'] {
+    background-color: #F8FAFC !important;
+    color: #0F172A !important;
+}
+[data-testid='stHeader'] { 
+    background-color: #FFFFFF !important;
+    border-bottom: 1px solid #E2E8F0;
+}
+body, p, span, label, div {
+    color: #1E293B !important;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Header & Titles */
+.title-text { 
+    font-size: 38px; 
+    font-weight: 800; 
+    color: #0F172A !important; 
+    text-align: center; 
+    margin-top: 5px; 
+    margin-bottom: 0px; 
+    letter-spacing: -0.5px;
+}
+.subtitle-text { 
+    font-size: 15px; 
+    color: #B45309 !important; 
+    text-align: center; 
+    margin-bottom: 25px; 
+    font-weight: 700; 
+    letter-spacing: 1.2px; 
+}
+
+/* Modern Card Containers */
+.side-card { 
+    background: #FFFFFF !important; 
+    border: 1px solid #E2E8F0 !important; 
+    border-radius: 14px !important; 
+    padding: 24px !important; 
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06) !important; 
+}
+.locked-section { 
+    text-align: center; 
+    padding: 25px; 
+    background-color: #FFFBEB !important; 
+    border-radius: 12px; 
+    border: 2px dashed #D97706 !important; 
+    margin-bottom: 20px;
+}
+.mega-banner { 
+    background: linear-gradient(135deg, #1E293B, #0F172A) !important; 
+    border: 2px solid #D97706; 
+    border-radius: 14px; 
+    padding: 22px; 
+    color: #F8FAFC !important; 
+    text-align: center; 
+    margin-bottom: 20px; 
+}
+.mega-banner h2, .mega-banner p, .mega-banner b {
+    color: #FFFFFF !important;
+}
+
+/* Button & Inputs Styling */
+button[kind="primary"], .stButton > button {
+    background-color: #0F172A !important;
+    color: #FFFFFF !important;
+    border: 1px solid #0F172A !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease-in-out;
+}
+button[kind="primary"]:hover, .stButton > button:hover {
+    background-color: #B45309 !important;
+    border-color: #B45309 !important;
+    color: #FFFFFF !important;
+}
+</style>
+"""
 st.markdown(css_rules, unsafe_allow_html=True)
 
 # Logo Display Section
@@ -72,17 +146,17 @@ with col_l2:
     if os.path.exists("logo.png"):
         st.image("logo.png", use_container_width=True)
     else:
-        st.markdown('<div style="text-align: center; font-size: 45px;">🛡️</div>', unsafe_allow_html=True)
+        st.markdown('<div style="text-align: center; font-size: 42px;">🍽️</div>', unsafe_allow_html=True)
     st.markdown('<div class="title-text">RestoPlan Pro</div>', unsafe_allow_html=True)
     st.markdown('<div class="subtitle-text">ULTIMATE RESTAURANT STARTUP BUDGET & ROI ANALYZER</div>', unsafe_allow_html=True)
 
-# 4. Standard User Registration & Login System
+# 4. Standard User Registration, Login & Forgot Password System
 if not st.session_state["logged_in"]:
     col_left, col_right = st.columns([1.2, 1], gap="large")
     
     with col_left:
-        st.markdown("<h3 style='color: #F5B041; margin-top: 0px;'>🌟 Plan Your Dream Food Business</h3>", unsafe_allow_html=True)
-        st.markdown("<p style='color: #EAECEE; font-size: 15px;'>Easily budget, discover top local vendors, and analyze profitability for Cloud Kitchens, Fine Dining Restaurants, Cozy Cafes, and QSR / Food Trucks.</p>", unsafe_allow_html=True)
+        st.markdown("<h3 style='color: #0F172A; margin-top: 0px;'>🌟 Plan Your Dream Food Business</h3>", unsafe_allow_html=True)
+        st.markdown("<p style='color: #475569; font-size: 15px;'>Easily budget, discover top local vendors, and analyze profitability for Cloud Kitchens, Fine Dining Restaurants, Cozy Cafes, and QSR / Food Trucks.</p>", unsafe_allow_html=True)
         
         ig1, ig2 = st.columns(2)
         with ig1:
@@ -94,16 +168,16 @@ if not st.session_state["logged_in"]:
             
     with col_right:
         st.markdown('<div class="side-card">', unsafe_allow_html=True)
-        st.markdown("### 🔐 Secure Account Portal")
-        auth_action = st.radio("Select Action", ["Login", "Register"], horizontal=True, key="auth_action_radio")
+        st.markdown("<h3 style='color: #0F172A; margin-top: 0px;'>🔐 Secure Account Portal</h3>", unsafe_allow_html=True)
+        auth_action = st.radio("Select Action", ["Login", "Register", "Forgot Password"], horizontal=True, key="auth_action_radio")
         
         conn = sqlite3.connect('users.db')
         c = conn.cursor()
         
         if auth_action == "Register":
-            st.info("Create your account using your Name, Phone/Email and Password.")
+            st.info("Create your account using your Name, Mobile/Email and Password.")
             reg_name = st.text_input("Full Name", key="reg_name")
-            reg_identifier = st.text_input("Phone Number or Email", key="reg_identifier")
+            reg_identifier = st.text_input("Mobile Number or Email", key="reg_identifier")
             reg_pass = st.text_input("Password", type="password", key="reg_pass")
             
             if st.button("Register Now", use_container_width=True, key="reg_btn"):
@@ -111,18 +185,18 @@ if not st.session_state["logged_in"]:
                     c.execute("SELECT * FROM users WHERE identifier = ?", (reg_identifier,))
                     existing = c.fetchone()
                     if existing:
-                        st.error("⚠️ An account with this Phone/Email already exists! Please login.")
+                        st.error("⚠️ An account with this Mobile/Email already exists! Please login.")
                     else:
                         hashed_pw = hash_password(reg_pass)
                         c.execute("INSERT INTO users (username, identifier, password, mega_plan) VALUES (?, ?, ?, 0)", (reg_name, reg_identifier, hashed_pw))
                         conn.commit()
-                        st.success("✅ Registration Successful! Please switch to Login.")
+                        st.success("✅ Registration Successful! Please switch to Login tab.")
                 else:
-                    st.error("Please fill in all fields.")
+                    st.error("Please fill in all details.")
                     
         elif auth_action == "Login":
-            st.info("Log in with your registered Phone/Email and Password.")
-            log_identifier = st.text_input("Phone Number or Email", key="log_identifier")
+            st.info("Log in with your registered Mobile Number/Email and Password.")
+            log_identifier = st.text_input("Mobile Number or Email", key="log_identifier")
             log_pass = st.text_input("Password", type="password", key="log_pass")
             
             if st.button("Login", use_container_width=True, key="log_btn"):
@@ -139,21 +213,70 @@ if not st.session_state["logged_in"]:
                     else:
                         st.error("❌ Invalid credentials or user not registered.")
                 else:
-                    st.error("Please enter both identifier and password.")
+                    st.error("Please enter both Mobile/Email and Password.")
+                    
+        elif auth_action == "Forgot Password":
+            st.info("Reset your password using an OTP sent to your Mobile/Email.")
+            fp_identifier = st.text_input("Registered Mobile Number or Email", key="fp_identifier")
+            
+            if not st.session_state["otp_sent"]:
+                if st.button("Send OTP", use_container_width=True, key="send_otp_btn"):
+                    if fp_identifier:
+                        c.execute("SELECT username FROM users WHERE identifier = ?", (fp_identifier,))
+                        user = c.fetchone()
+                        if user:
+                            otp_val = str(random.randint(1000, 9999))
+                            c.execute("INSERT OR REPLACE INTO otps (identifier, otp) VALUES (?, ?)", (fp_identifier, otp_val))
+                            conn.commit()
+                            st.session_state["otp_sent"] = True
+                            st.session_state["fp_target"] = fp_identifier
+                            st.success(f"📲 OTP Sent to {fp_identifier}! (Simulated OTP: {otp_val})")
+                            st.rerun()
+                        else:
+                            st.error("❌ Mobile Number/Email not registered.")
+                    else:
+                        st.error("Please enter your registered Mobile/Email.")
+            else:
+                st.write(f"OTP sent to: **{st.session_state.get('fp_target', '')}**")
+                entered_otp = st.text_input("Enter 4-digit OTP", key="entered_otp")
+                new_pass = st.text_input("Set New Password", type="password", key="new_pass")
+                
+                if st.button("Verify OTP & Change Password", use_container_width=True, key="verify_otp_btn"):
+                    c.execute("SELECT otp FROM otps WHERE identifier = ?", (st.session_state["fp_target"],))
+                    row = c.fetchone()
+                    if row and row[0] == entered_otp:
+                        if new_pass:
+                            hashed_new = hash_password(new_pass)
+                            c.execute("UPDATE users SET password = ? WHERE identifier = ?", (hashed_new, st.session_state["fp_target"]))
+                            c.execute("DELETE FROM otps WHERE identifier = ?", (st.session_state["fp_target"],))
+                            conn.commit()
+                            st.session_state["otp_sent"] = False
+                            st.success("✅ Password reset successfully! Please switch to Login tab.")
+                        else:
+                            st.error("Please enter a new password.")
+                    else:
+                        st.error("❌ Invalid OTP. Please try again.")
+                        
+                if st.button("Resend OTP / Change Number", key="reset_fp_state"):
+                    st.session_state["otp_sent"] = False
+                    st.rerun()
                         
         conn.close()
         st.markdown('</div>', unsafe_allow_html=True)
         
     st.stop()
 
-# --- APP STARTS HERE AFTER LOGIN ---
-st.sidebar.success(f"👤 Welcome, {st.session_state['username']}!")
-if st.sidebar.button("Logout"):
+# --- APP DASHBOARD (AFTER LOGIN) ---
+st.sidebar.markdown(f"### 👤 Logged in as: **{st.session_state['username']}**")
+if st.sidebar.button("Logout", use_container_width=True):
     st.session_state["logged_in"] = False
     st.session_state["is_paid"] = False
     st.session_state["mega_plan_active"] = False
+    st.session_state["username"] = ""
+    st.session_state["identifier"] = ""
     st.rerun()
 
+st.sidebar.markdown("---")
 st.sidebar.title("⚙️ Setup Details")
 country = st.sidebar.selectbox("Select Country", ["India", "USA", "UAE", "UK", "Australia"])
 location_type = st.sidebar.selectbox("Location Type", ["Metro City", "Tier 2 City", "Tier 3 City", "Highway"])
@@ -201,7 +324,7 @@ def display_payment_gateway(unique_tab_key):
     st.error("🔒 **VIP PRO FEATURE LOCKED — UNLOCK FULL BENEFITS IN JUST ₹250 ($3)**")
     
     b_col1, b_col2, b_col3 = st.columns(3)
-    b_col1.success("📊 **Benefit 1:** Interactive CapEx vs Working Capital Pie-Charts")
+    b_col1.success("📊 **Benefit 1:** Interactive CapEx vs Working Capital Charts")
     b_col2.info("🎯 **Benefit 2:** Exact ROI Payback Months & Net Profit Projections")
     b_col3.warning("📥 **Benefit 3:** 1-Click Bank Loan & Investor Ready `resturant.xlsx`")
     
@@ -226,7 +349,7 @@ def display_payment_gateway(unique_tab_key):
         paypal_amount = "3"
         paypal_link = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business={urllib.parse.quote(paypal_email)}&currency_code=USD&amount={paypal_amount}&item_name=RestoPlan+Pro+Unlock"
         
-        st.markdown(f'<a href="{paypal_link}" target="_blank"><button style="background-color:#003087; color:white; padding:10px 20px; border:none; border-radius:5px; font-size:16px; cursor:pointer;">Pay $3 via PayPal</button></a>', unsafe_allow_html=True)
+        st.markdown(f'<a href="{paypal_link}" target="_blank"><button style="background-color:#0F172A; color:white; padding:10px 20px; border:none; border-radius:6px; font-size:15px; cursor:pointer;">Pay $3 via PayPal</button></a>', unsafe_allow_html=True)
         st.write("---")
         st.write("Done with payment? Enter your Transaction ID below to verify and unlock.")
         
@@ -326,34 +449,6 @@ with tab5:
             paypal_amount = "12"
             paypal_link = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business={urllib.parse.quote(paypal_email)}&currency_code=USD&amount={paypal_amount}&item_name=Mega+Solution+Plan"
             
-            st.markdown(f'<a href="{paypal_link}" target="_blank"><button style="background-color:#003087; color:white; padding:12px 24px; border:none; border-radius:6px; font-size:16px; cursor:pointer; font-weight:bold;">Pay $12 via PayPal</button></a>', unsafe_allow_html=True)
+            st.markdown(f'<a href="{paypal_link}" target="_blank"><button style="background-color:#0F172A; color:white; padding:12px 24px; border:none; border-radius:6px; font-size:15px; cursor:pointer; font-weight:bold;">Pay $12 via PayPal</button></a>', unsafe_allow_html=True)
             st.write("---")
-            mega_tx = st.text_input("Enter Mega Plan Transaction ID", key="mega_tx_input")
-            if st.button("Verify & Activate Mega Solution Plan", key="verify_mega_btn"):
-                if len(mega_tx) > 4:
-                    st.session_state["mega_plan_active"] = True
-                    conn = sqlite3.connect('users.db')
-                    c = conn.cursor()
-                    c.execute("UPDATE users SET mega_plan = 1 WHERE identifier = ?", (st.session_state["identifier"],))
-                    conn.commit()
-                    conn.close()
-                    st.success("🎉 Mega Solution Plan Activated Successfully! Enjoy direct vendor access.")
-                    st.rerun()
-                else:
-                    st.error("Please enter a valid Transaction ID.")
-    else:
-        st.success("👑 **Mega Solution Plan Active!** Here are the Top 5 Verified Vendors for your setup:")
-        
-        vendors_df = pd.DataFrame({
-            "Vendor Name": ["Apex Commercial Kitchens", "Metro Fresh Agro Supplies", "Urban Décor & Interiors", "FastPOS Billing Solutions", "Delta Refrigeration & HVAC"],
-            "Specialization": ["Commercial Heavy-Duty Ovens & Fryers", "Bulk Organic Raw Materials & Spices", "Turnkey Restaurant Interior Fit-outs", "Cloud POS & Inventory Software", "Walk-in Freezers & AC Ducting"],
-            "Contact Phone / Email": ["+91 98765 43210 / sales@apexkitchen.com", "+91 91234 56789 / supply@metroagro.com", "+91 99887 76655 / design@urbandecor.in", "+91 95544 33221 / support@fastpos.io", "+91 94433 22110 / info@deltahvac.com"],
-            "Action / Direct Inquiry": ["Call Vendor", "Request Quote", "Book Consultation", "Get Free Demo", "Get Catalog"]
-        })
-        st.dataframe(vendors_df, use_container_width=True)
-        st.info("💡 **Pro Tip:** Mention **RestoPlan Pro Reference** when calling these vendors to get an exclusive 10% startup discount on bulk orders!")
-
-with tab6:
-    st.subheader("🎥 Step-by-Step Restaurant Budget Workflow Video Walkthrough")
-    st.write("Watch this video tutorial to learn how to use every feature of RestoPlan Pro step-by-step.")
-    st.video("https://youtu.be/reCF7nIfen4")
+            mega_tx = st.text_input("Enter Mega Plan Transaction ID", key="mega_
