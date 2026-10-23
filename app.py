@@ -46,7 +46,6 @@ if "otp_sent" not in st.session_state:
 # 3. Clean White Background & Crisp Button CSS
 css_rules = """
 <style>
-/* Main Background */
 [data-testid='stAppViewContainer'] {
     background-color: #F8FAFC !important;
 }
@@ -54,8 +53,6 @@ css_rules = """
     background-color: #FFFFFF !important;
     border-bottom: 1px solid #E2E8F0;
 }
-
-/* Titles */
 .title-text { 
     font-size: 38px; 
     font-weight: 800; 
@@ -72,8 +69,6 @@ css_rules = """
     font-weight: 700; 
     letter-spacing: 1.2px; 
 }
-
-/* All Buttons: Black Background & Bright White Text */
 .stButton > button, 
 button[kind="primary"], 
 button[kind="secondary"] {
@@ -85,16 +80,12 @@ button[kind="secondary"] {
     font-weight: 700 !important;
     padding: 10px 20px !important;
 }
-
-/* Button Text Inside Elements */
 .stButton > button p, 
 .stButton > button span, 
 .stButton > button div {
     color: #FFFFFF !important;
     font-weight: 700 !important;
 }
-
-/* Button Hover State */
 .stButton > button:hover, 
 .stButton > button:hover p, 
 .stButton > button:hover span {
@@ -102,8 +93,6 @@ button[kind="secondary"] {
     color: #FBBF24 !important;
     border-color: #262626 !important;
 }
-
-/* Cards & Special Sections */
 .locked-section { 
     text-align: center; 
     padding: 25px; 
@@ -214,134 +203,4 @@ if not st.session_state["logged_in"]:
                             st.session_state["otp_sent"] = True
                             st.session_state["fp_target"] = fp_identifier
                             st.success(f"📲 OTP Sent to {fp_identifier}! (Simulated OTP: {otp_val})")
-                            st.rerun()
-                        else:
-                            st.error("❌ Mobile Number/Email not registered.")
-                    else:
-                        st.error("Please enter your registered Mobile/Email.")
-            else:
-                st.write(f"OTP sent to: **{st.session_state.get('fp_target', '')}**")
-                entered_otp = st.text_input("Enter 4-digit OTP", key="entered_otp_field")
-                new_pass = st.text_input("Set New Password", type="password", key="new_pass_field")
-                
-                if st.button("Verify OTP & Change Password", use_container_width=True, key="verify_otp_btn"):
-                    c.execute("SELECT otp FROM otps WHERE identifier = ?", (st.session_state["fp_target"],))
-                    row = c.fetchone()
-                    if row and row[0] == entered_otp:
-                        if new_pass:
-                            hashed_new = hash_password(new_pass)
-                            c.execute("UPDATE users SET password = ? WHERE identifier = ?", (hashed_new, st.session_state["fp_target"]))
-                            c.execute("DELETE FROM otps WHERE identifier = ?", (st.session_state["fp_target"],))
-                            conn.commit()
-                            st.session_state["otp_sent"] = False
-                            st.success("✅ Password reset successfully! Please switch to Login tab.")
-                        else:
-                            st.error("Please enter a new password.")
-                    else:
-                        st.error("❌ Invalid OTP. Please try again.")
-                        
-                if st.button("Resend OTP / Change Number", key="reset_fp_btn"):
-                    st.session_state["otp_sent"] = False
-                    st.rerun()
-                        
-        conn.close()
-    st.stop()
-
-# --- APP DASHBOARD (AFTER LOGIN) ---
-st.sidebar.markdown(f"### 👤 Logged in as: **{st.session_state['username']}**")
-if st.sidebar.button("Logout", use_container_width=True):
-    st.session_state["logged_in"] = False
-    st.session_state["is_paid"] = False
-    st.session_state["mega_plan_active"] = False
-    st.session_state["username"] = ""
-    st.session_state["identifier"] = ""
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.title("⚙️ Setup Details")
-country = st.sidebar.selectbox("Select Country", ["India", "USA", "UAE", "UK", "Australia"])
-location_type = st.sidebar.selectbox("Location Type", ["Metro City", "Tier 2 City", "Tier 3 City", "Highway"])
-currency = st.sidebar.selectbox("Select Currency", ["₹ (INR)", "$ (USD)"])
-restaurant_type = st.sidebar.selectbox("Restaurant Model", ["Cloud Kitchen", "Fine Dining", "QSR", "Cafe", "Food Truck"])
-
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🛠️ 1. Setup Costs", 
-    "🔄 2. Monthly Costs", 
-    "📊 3. Pro Analytics & ROI", 
-    "📥 4. Export Plan", 
-    "📍 5. Location & Top 5 Vendors",
-    "🔥 6. Step-by-Step Walkthrough"
-])
-
-with tab1:
-    st.subheader(f"Initial Setup Investment for {restaurant_type} ({location_type}, {country})")
-    col1, col2 = st.columns(2)
-    with col1:
-        deposit = st.number_input(f"Security Deposit ({currency})", value=200000, step=10000)
-        interior = st.number_input(f"Furniture & Decor ({currency})", value=300000, step=10000)
-    with col2:
-        kitchen_eq = st.number_input(f"Kitchen Equipment ({currency})", value=400000, step=20000)
-        licenses = st.number_input(f"Licenses & POS ({currency})", value=45000, step=1000)
-    total_capex = deposit + interior + kitchen_eq + licenses
-    st.info(f"**Total Capital Expenditure:** {currency} {total_capex:,.2f}")
-
-with tab2:
-    st.subheader("Monthly Running Expenses")
-    col3, col4 = st.columns(2)
-    with col3:
-        rent = st.number_input(f"Monthly Rent ({currency})", value=50000, step=5000)
-        staffing = st.number_input(f"Staff Salary ({currency})", value=80000, step=5000)
-    with col4:
-        raw_materials = st.number_input(f"Raw Materials ({currency})", value=100000, step=5000)
-        utilities = st.number_input(f"Utilities & Marketing ({currency})", value=30000, step=1000)
-    total_opex = rent + staffing + raw_materials + utilities
-    working_capital = total_opex * 3
-    st.warning(f"**Total Monthly OpEx:** {currency} {total_opex:,.2f} | **Working Capital Reserve (3 Months):** {currency} {working_capital:,.2f}")
-
-grand_total = total_capex + working_capital
-
-def display_payment_gateway(unique_tab_key):
-    st.markdown('<div class="locked-section">', unsafe_allow_html=True)
-    st.error("🔒 **VIP PRO FEATURE LOCKED — UNLOCK FULL BENEFITS IN JUST ₹250 ($3)**")
-    b_col1, b_col2, b_col3 = st.columns(3)
-    b_col1.success("📊 **Benefit 1:** Interactive CapEx vs Working Capital Charts")
-    b_col2.info("🎯 **Benefit 2:** Exact ROI Payback Months & Net Profit Projections")
-    b_col3.warning("📥 **Benefit 3:** 1-Click Bank Loan & Investor Ready `resturant.xlsx`")
-    st.markdown("---")
-    pay_col1, pay_col2 = st.columns(2)
-    with pay_col1:
-        st.subheader("Method 1: Pay via UPI (India)")
-        upi_id = "9335845451@indie" 
-        upi_name = "Devendra Srivastava"
-        amount = "250"
-        upi_url = f"upi://pay?pa={upi_id}&pn={urllib.parse.quote(upi_name)}&am={amount}&cu=INR"
-        qr_code_url = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={urllib.parse.quote(upi_url)}"
-        st.image(qr_code_url, caption=f"Scan to pay ₹{amount}")
-        st.write(f"UPI ID: `{upi_id}`")
-    with pay_col2:
-        st.subheader("Method 2: Pay via PayPal (International)")
-        paypal_email = "devssconsulting@gmail.com"
-        paypal_amount = "3"
-        paypal_link = f"https://www.paypal.com/cgi-bin/webscr?cmd=_xclick&business={urllib.parse.quote(paypal_email)}&currency_code=USD&amount={paypal_amount}&item_name=RestoPlan+Pro+Unlock"
-        st.markdown(f'<a href="{paypal_link}" target="_blank"><button style="background-color:#000000; color:white; padding:10px 20px; border:none; border-radius:6px; font-size:15px; cursor:pointer;">Pay $3 via PayPal</button></a>', unsafe_allow_html=True)
-        st.write("---")
-        st.write("Done with payment? Enter your Transaction ID below to verify and unlock.")
-        tx_id = st.text_input("Transaction / UPI Reference ID", key=f"tx_id_input_{unique_tab_key}")
-        if st.button("Verify & Unlock Pro Benefits", key=f"tx_btn_{unique_tab_key}"):
-            if len(tx_id) > 4: 
-                st.session_state["is_paid"] = True
-                st.rerun()
-            else:
-                st.error("Invalid Transaction ID. Please try again.")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with tab3:
-    if not st.session_state["is_paid"]:
-        display_payment_gateway("tab3")
-    else:
-        st.success("✅ Payment Verified. Welcome to VIP Pro Analytics!")
-        capex_data = {"Category": ["Capital Expenditure", "Working Capital (3M)"], "Amount": [total_capex, working_capital]}
-        fig_capex = px.pie(capex_data, values="Amount", names="Category", title="Total Investment Breakdown", hole=0.4)
-        st.plotly_chart(fig_capex, use_container_width=True)
-        st.write(f"### 💰 Net Startup Investment Required: {currency} {grand_total:,.2f}")
-        st.info("🎯 **ROI Calculator:** Assuming a
+                            st
