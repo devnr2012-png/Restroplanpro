@@ -12,14 +12,13 @@ import requests
 # 1. Page Configuration
 st.set_page_config(page_title="RestoPlan Pro", page_icon="🍽️", layout="wide", initial_sidebar_state="expanded")
 
-# --- FAST2SMS API CONFIGURATION ---
+# --- FAST2SMS API KEY INTEGRATED ---
 FAST2SMS_API_KEY = "Rg7N51LZuhDCFWsMEorwmBHdpGSye802XnlVP3qU9azA4v6JkY9Eun8zWR4VZq1pdCaeAJUmB27QNFXM"
 
 def send_sms_otp(mobile_number, otp_code):
     clean_mobile = "".join(filter(str.isdigit, str(mobile_number)))
     if len(clean_mobile) == 12 and clean_mobile.startswith("91"):
         clean_mobile = clean_mobile[2:]
-    
     if len(clean_mobile) != 10:
         return False, "Kripya valid 10-digit mobile number dalein."
 
@@ -143,161 +142,4 @@ if not st.session_state["logged_in"]:
             if st.button("Login", use_container_width=True, key="login_submit_btn"):
                 if log_identifier and log_pass:
                     hashed_pw = hash_password(log_pass)
-                    c.execute("SELECT username, mega_plan FROM users WHERE identifier = ? AND password = ?", (log_identifier, hashed_pw))
-                    user = c.fetchone()
-                    if user:
-                        st.session_state["logged_in"] = True
-                        st.session_state["username"] = user[0]
-                        st.session_state["identifier"] = log_identifier
-                        st.session_state["mega_plan_active"] = bool(user[1])
-                        st.rerun()
-                    else:
-                        st.error("❌ Invalid Mobile/Email or Password.")
-                else:
-                    st.error("Please enter both Mobile/Email and Password.")
-                    
-        elif "Register" in auth_action:
-            st.info("Create your account using your Name, Mobile/Email and Password.")
-            reg_name = st.text_input("Full Name", key="register_name_field")
-            reg_identifier = st.text_input("Mobile Number or Email", key="register_id_field")
-            reg_pass = st.text_input("Password", type="password", key="register_pass_field")
-            
-            if st.button("Register Now", use_container_width=True, key="register_submit_btn"):
-                if reg_name and reg_identifier and reg_pass:
-                    c.execute("SELECT * FROM users WHERE identifier = ?", (reg_identifier,))
-                    if c.fetchone():
-                        st.error("⚠️ An account with this Mobile/Email already exists! Please login.")
-                    else:
-                        hashed_pw = hash_password(reg_pass)
-                        c.execute("INSERT INTO users (username, identifier, password, mega_plan) VALUES (?, ?, ?, 0)", (reg_name, reg_identifier, hashed_pw))
-                        conn.commit()
-                        st.success("✅ Registration Successful! Please switch to Login tab.")
-                else:
-                    st.error("Please fill in all details.")
-                    
-        elif "Forgot" in auth_action:
-            st.info("Reset your password using an SMS OTP sent directly to your Mobile Phone.")
-            
-            # Step 1: Request OTP
-            if not st.session_state["otp_sent"] and not st.session_state["otp_verified"]:
-                fp_identifier = st.text_input("Registered 10-digit Mobile Number", key="fp_id_field")
-                if st.button("Send SMS OTP", use_container_width=True, key="send_otp_btn"):
-                    if fp_identifier:
-                        c.execute("SELECT username FROM users WHERE identifier = ?", (fp_identifier,))
-                        user = c.fetchone()
-                        if user:
-                            otp_val = str(random.randint(1000, 9999))
-                            c.execute("INSERT OR REPLACE INTO otps (identifier, otp) VALUES (?, ?)", (fp_identifier, otp_val))
-                            conn.commit()
-                            
-                            ok, status_txt = send_sms_otp(fp_identifier, otp_val)
-                            st.session_state["otp_sent"] = True
-                            st.session_state["fp_target"] = fp_identifier
-                            st.session_state["current_otp"] = otp_val
-                            st.session_state["sms_status_msg"] = status_txt
-                            st.rerun()
-                        else:
-                            st.error("❌ Yeh Mobile Number registered nahi hai. Pehle Register karein.")
-                    else:
-                        st.error("Kripya apna registered 10-digit Mobile Number dalein.")
-
-            # Step 2: Enter & Verify OTP
-            elif st.session_state["otp_sent"] and not st.session_state["otp_verified"]:
-                st.write(f"OTP request mobile: **{st.session_state.get('fp_target', '')}**")
-                
-                if "successfully" in st.session_state.get("sms_status_msg", "").lower():
-                    st.success(f"📲 {st.session_state['sms_status_msg']}")
-                else:
-                    st.warning(f"Gateway Notice: {st.session_state.get('sms_status_msg', '')}")
-                    st.info(f"Screen Alert (Instant OTP): **{st.session_state.get('current_otp', '')}**")
-                
-                entered_otp = st.text_input("Enter 4-digit OTP", key="entered_otp_field")
-                
-                col_v1, col_v2 = st.columns(2)
-                with col_v1:
-                    if st.button("Verify OTP", use_container_width=True, key="verify_otp_btn"):
-                        c.execute("SELECT otp FROM otps WHERE identifier = ?", (st.session_state["fp_target"],))
-                        row = c.fetchone()
-                        if row and row[0] == entered_otp:
-                            st.session_state["otp_verified"] = True
-                            st.success("✅ OTP Verified! Ab naya password set karein.")
-                            st.rerun()
-                        else:
-                            st.error("❌ Galat OTP. Dobara check karke enter karein.")
-                with col_v2:
-                    if st.button("Resend OTP", use_container_width=True, key="resend_fp_btn"):
-                        st.session_state["otp_sent"] = False
-                        st.session_state["otp_verified"] = False
-                        st.rerun()
-
-            # Step 3: Set New & Confirm Password
-            elif st.session_state["otp_verified"]:
-                st.success(f"Verified User: **{st.session_state.get('fp_target', '')}**")
-                new_pass = st.text_input("New Password", type="password", key="new_pass_field")
-                confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_field")
-                
-                if st.button("Reset & Save Password", use_container_width=True, key="save_pass_btn"):
-                    if not new_pass or not confirm_pass:
-                        st.error("Dono password fields bharein.")
-                    elif new_pass != confirm_pass:
-                        st.error("❌ Passwords match nahi ho rahe hain.")
-                    else:
-                        hashed_new = hash_password(new_pass)
-                        c.execute("UPDATE users SET password = ? WHERE identifier = ?", (hashed_new, st.session_state["fp_target"]))
-                        c.execute("DELETE FROM otps WHERE identifier = ?", (st.session_state["fp_target"],))
-                        conn.commit()
-                        st.session_state["otp_sent"] = False
-                        st.session_state["otp_verified"] = False
-                        st.session_state["fp_target"] = ""
-                        st.success("🎉 Password reset ho gaya! Ab Login tab par jaakar login karein.")
-                        
-        conn.close()
-    st.stop()
-
-# --- APP DASHBOARD (AFTER LOGIN) ---
-st.sidebar.markdown(f"### 👤 Logged in as: **{st.session_state['username']}**")
-if st.sidebar.button("Logout", use_container_width=True):
-    st.session_state["logged_in"] = False
-    st.session_state["is_paid"] = False
-    st.session_state["mega_plan_active"] = False
-    st.session_state["username"] = ""
-    st.session_state["identifier"] = ""
-    st.rerun()
-
-st.sidebar.markdown("---")
-st.sidebar.title("⚙️ Setup Details")
-country = st.sidebar.selectbox("Select Country", ["India", "USA", "UAE", "UK", "Australia"])
-location_type = st.sidebar.selectbox("Location Type", ["Metro City", "Tier 2 City", "Tier 3 City", "Highway"])
-currency = st.sidebar.selectbox("Select Currency", ["₹ (INR)", "$ (USD)"])
-restaurant_type = st.sidebar.selectbox("Restaurant Model", ["Cloud Kitchen", "Fine Dining", "QSR", "Cafe", "Food Truck"])
-
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
-    "🛠️ 1. Setup Costs", 
-    "🔄 2. Monthly Costs", 
-    "📊 3. Pro Analytics & ROI", 
-    "📥 4. Export Plan", 
-    "📍 5. Location & Top 5 Vendors",
-    "🔥 6. Step-by-Step Walkthrough"
-])
-
-with tab1:
-    st.subheader(f"Initial Setup Investment for {restaurant_type} ({location_type}, {country})")
-    col1, col2 = st.columns(2)
-    with col1:
-        deposit = st.number_input(f"Security Deposit ({currency})", value=200000, step=10000)
-        interior = st.number_input(f"Furniture & Decor ({currency})", value=300000, step=10000)
-    with col2:
-        kitchen_eq = st.number_input(f"Kitchen Equipment ({currency})", value=400000, step=20000)
-        licenses = st.number_input(f"Licenses & POS ({currency})", value=45000, step=1000)
-    total_capex = deposit + interior + kitchen_eq + licenses
-    st.info(f"**Total Capital Expenditure:** {currency} {total_capex:,.2f}")
-
-with tab2:
-    st.subheader("Monthly Running Expenses")
-    col3, col4 = st.columns(2)
-    with col3:
-        rent = st.number_input(f"Monthly Rent ({currency})", value=50000, step=5000)
-        staffing = st.number_input(f"Staff Salary ({currency})", value=80000, step=5000)
-    with col4:
-        raw_materials = st.number_input(f"Raw Materials ({currency})", value=100000, step=5000)
-        utilities = st.number_input(f"Utilities & Marketing ({currency})", value=30000, step=100
+                    c.execute("SELECT username, mega_plan FROM users WHERE identifier =
