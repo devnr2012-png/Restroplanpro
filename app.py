@@ -7,9 +7,49 @@ import os
 import sqlite3
 import hashlib
 import random
+import requests
 
 # 1. Page Configuration
 st.set_page_config(page_title="RestoPlan Pro", page_icon="🍽️", layout="wide", initial_sidebar_state="expanded")
+
+# --- FAST2SMS API CONFIGURATION ---
+# https://www.fast2sms.com par free sign-up karke "Dev API" se apni free API Key le sakte hain
+FAST2SMS_API_KEY = os.environ.get("FAST2SMS_API_KEY", "YOUR_FAST2SMS_API_KEY_HERE")
+
+def send_sms_otp(mobile_number, otp_code):
+    """Sends OTP to Indian mobile numbers via Fast2SMS API with error handling."""
+    clean_mobile = "".join(filter(str.isdigit, str(mobile_number)))
+    if len(clean_mobile) == 12 and clean_mobile.startswith("91"):
+        clean_mobile = clean_mobile[2:]
+    
+    if len(clean_mobile) != 10:
+        return False, "Kripya 10-digit ka valid mobile number dalein."
+
+    if FAST2SMS_API_KEY == "YOUR_FAST2SMS_API_KEY_HERE":
+        # Fallback for local testing / when API key is not yet set
+        return True, "DEMO_MODE"
+
+    url = "https://www.fast2sms.com/dev/bulkV2"
+    payload = {
+        "variables_values": str(otp_code),
+        "route": "otp",
+        "numbers": clean_mobile
+    }
+    headers = {
+        'authorization': FAST2SMS_API_KEY,
+        'Content-Type': "application/x-www-form-urlencoded"
+    }
+
+    try:
+        response = requests.post(url, data=payload, headers=headers, timeout=8)
+        res_json = response.json()
+        if res_json.get("return") is True:
+            return True, "SMS sent successfully to mobile."
+        else:
+            err_msg = res_json.get("message", ["SMS Gateway error"])[0] if isinstance(res_json.get("message"), list) else res_json.get("message", "SMS Gateway error")
+            return False, f"SMS Gateway error: {err_msg}"
+    except Exception as e:
+        return False, f"Connection error: {str(e)}"
 
 # --- DATABASE SETUP ---
 def init_db():
@@ -194,12 +234,12 @@ if not st.session_state["logged_in"]:
                     st.error("Please fill in all details.")
                     
         elif "Forgot" in auth_action:
-            st.info("Reset your password using an OTP sent to your Mobile Number.")
+            st.info("Reset your password using an SMS OTP sent to your Mobile Number.")
             
-            # Step 1: Send OTP
+            # Step 1: Send OTP via SMS
             if not st.session_state["otp_sent"] and not st.session_state["otp_verified"]:
-                fp_identifier = st.text_input("Registered Mobile Number or Email", key="fp_id_field")
-                if st.button("Send OTP", use_container_width=True, key="send_otp_btn"):
+                fp_identifier = st.text_input("Registered 10-digit Mobile Number", key="fp_id_field")
+                if st.button("Send SMS OTP", use_container_width=True, key="send_otp_btn"):
                     if fp_identifier:
                         c.execute("SELECT username FROM users WHERE identifier = ?", (fp_identifier,))
                         user = c.fetchone()
@@ -207,18 +247,28 @@ if not st.session_state["logged_in"]:
                             otp_val = str(random.randint(1000, 9999))
                             c.execute("INSERT OR REPLACE INTO otps (identifier, otp) VALUES (?, ?)", (fp_identifier, otp_val))
                             conn.commit()
+                            
+                            success, msg = send_sms_otp(fp_identifier, otp_val)
                             st.session_state["otp_sent"] = True
                             st.session_state["fp_target"] = fp_identifier
-                            st.success(f"📲 OTP Sent to {fp_identifier}! (OTP: {otp_val})")
+                            
+                            if success and msg == "DEMO_MODE":
+                                st.warning("ℹ️ Fast2SMS API Key add nahi hai, isliye screen par OTP dikha rahe hain:")
+                                st.success(f"📲 OTP: **{otp_val}** (Valid for {fp_identifier})")
+                            elif success:
+                                st.success(f"📲 OTP SMS aapke mobile ({fp_identifier}) par bhej diya gaya hai!")
+                            else:
+                                st.warning(f"⚠️ SMS gateway message: {msg}")
+                                st.info(f"Fallback OTP: **{otp_val}**")
                             st.rerun()
                         else:
-                            st.error("❌ Mobile Number/Email not registered.")
+                            st.error("❌ Yeh Mobile Number registered nahi hai.")
                     else:
-                        st.error("Please enter your registered Mobile Number.")
+                        st.error("Kripya apna registered Mobile Number dalein.")
 
             # Step 2: Verify OTP
             elif st.session_state["otp_sent"] and not st.session_state["otp_verified"]:
-                st.write(f"OTP has been sent to: **{st.session_state.get('fp_target', '')}**")
+                st.write(f"OTP bheja gaya number: **{st.session_state.get('fp_target', '')}**")
                 entered_otp = st.text_input("Enter 4-digit OTP", key="entered_otp_field")
                 
                 col_v1, col_v2 = st.columns(2)
@@ -228,27 +278,27 @@ if not st.session_state["logged_in"]:
                         row = c.fetchone()
                         if row and row[0] == entered_otp:
                             st.session_state["otp_verified"] = True
-                            st.success("✅ OTP Verified Successfully! Now set your new password.")
+                            st.success("✅ OTP Verified! Ab apna naya password banayein.")
                             st.rerun()
                         else:
-                            st.error("❌ Invalid OTP. Please try again.")
+                            st.error("❌ Galat OTP. Dobara check karein.")
                 with col_v2:
                     if st.button("Resend OTP", use_container_width=True, key="resend_fp_btn"):
                         st.session_state["otp_sent"] = False
                         st.session_state["otp_verified"] = False
                         st.rerun()
 
-            # Step 3: New Password & Confirm Password (Only after OTP is Verified)
+            # Step 3: New Password & Confirm Password
             elif st.session_state["otp_verified"]:
-                st.success(f"Verified User: **{st.session_state.get('fp_target', '')}**")
+                st.success(f"User Verified: **{st.session_state.get('fp_target', '')}**")
                 new_pass = st.text_input("New Password", type="password", key="new_pass_field")
                 confirm_pass = st.text_input("Confirm Password", type="password", key="confirm_pass_field")
                 
                 if st.button("Reset & Save Password", use_container_width=True, key="save_pass_btn"):
                     if not new_pass or not confirm_pass:
-                        st.error("Please fill both password fields.")
+                        st.error("Dono password fields bharein.")
                     elif new_pass != confirm_pass:
-                        st.error("❌ Passwords do not match. Please re-enter carefully.")
+                        st.error("❌ Passwords match nahi ho rahe hain.")
                     else:
                         hashed_new = hash_password(new_pass)
                         c.execute("UPDATE users SET password = ? WHERE identifier = ?", (hashed_new, st.session_state["fp_target"]))
@@ -257,7 +307,7 @@ if not st.session_state["logged_in"]:
                         st.session_state["otp_sent"] = False
                         st.session_state["otp_verified"] = False
                         st.session_state["fp_target"] = ""
-                        st.success("🎉 Password reset successfully! Please switch to Login tab to continue.")
+                        st.success("🎉 Password reset ho gaya! Ab Login tab par jaakar login karein.")
                         
         conn.close()
     st.stop()
